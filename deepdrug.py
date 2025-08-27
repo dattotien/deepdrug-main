@@ -135,32 +135,34 @@ if __name__ == '__main__':
                                         patience=10,)
     
     trainer = Trainer(
-                    gpus=[gpus,],
-                    accelerator=None,
-                    max_epochs=200, min_epochs=5,
-                    default_root_dir= save_folder,
-                    fast_dev_run=False,
-                    check_val_every_n_epoch=1,
-                    callbacks=  [checkpoint_callback,
-                                earlystop_callback,],
-                    )
-    trainer.fit(model, datamodule=datamodule,)
+    accelerator="gpu" if gpus > 0 else "cpu",
+    devices=gpus if gpus > 0 else None,
+    max_epochs=200, min_epochs=5,
+    default_root_dir=save_folder,
+    fast_dev_run=False,
+    check_val_every_n_epoch=1,
+    callbacks=[checkpoint_callback, earlystop_callback],
+    )
+    trainer.fit(model, datamodule=datamodule)
 
 
     ################  Prediction ##################
-    print('loading best weight in %s ...'%(checkpoint_callback.best_model_path))
-    model = model.load_from_checkpoint(checkpoint_callback.best_model_path,verbose=True)
-    model.eval()    
-    
-    trainer.test(model,datamodule=datamodule,)
-    y_pred = trainer.predict(model,dataloaders =datamodule.test_dataloader())
+    print('loading best weight in %s ...' % checkpoint_callback.best_model_path)
+    model = model.load_from_checkpoint(checkpoint_callback.best_model_path)
+    model.eval()
+
+    trainer.test(model, datamodule=datamodule)
+
+    y_pred = trainer.predict(model, dataloaders=datamodule.test_dataloader())
     y_true = np.array(datamodule.pair_labels[datamodule.test_indexs])
 
-    if isinstance(y_pred[0],t.Tensor):
-        y_pred = [x.cpu().data.numpy() for x in y_pred]
-    if isinstance(y_pred,t.Tensor):
-        y_pred = y_pred.cpu().data.numpy()
-    y_pred = np.concatenate(y_pred,axis=0) 
-    pd.DataFrame(y_pred).to_csv(y_pred_file,header=True,index=False)
-    pd.DataFrame(y_true).to_csv(y_true_file,header=True,index=False)
+    # Convert Tensor → numpy
+    if isinstance(y_pred[0], t.Tensor):
+        y_pred = [x.detach().cpu().numpy() for x in y_pred]
+    if isinstance(y_pred, t.Tensor):
+        y_pred = y_pred.detach().cpu().numpy()
+
+    y_pred = np.concatenate(y_pred, axis=0)
+    pd.DataFrame(y_pred).to_csv(y_pred_file, header=True, index=False)
+    pd.DataFrame(y_true).to_csv(y_true_file, header=True, index=False)
     print('save prediction completed.')
